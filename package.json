@@ -1,5 +1,5 @@
 {
-  "name": "redis-rxjs",
+  "name": "@db3dev/redis-rxjs",
   "version": "0.0.1",
   "description": "RXJS wrapper for redis client",
   "main": "./lib/redis.js",
