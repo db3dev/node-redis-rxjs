@@ -1,17 +1,21 @@
 import * as redisLib from 'redis';
 import { Observable } from 'rxjs';
 
+const thirtyMinutes = 60 * 30;
+const mode = 'EX';
+
 export class Redis {
     private _config: redisLib.ClientOpts;
     private _client: redisLib.RedisClient;
     private _listeners: Function;
+    private _defaultExpiry = thirtyMinutes;
 
     public connect (): Observable<redisLib.RedisClient> {
         if (!this._config) {
             return Observable.throw(new Error('Could not create redis client, config does not exist.'));
         }
 
-        this._client = redisLib.createClient(this._config);
+        const client = this._client = redisLib.createClient(this._config);
         
         if (this._listeners) {
             this._listeners();
@@ -19,24 +23,26 @@ export class Redis {
             this.defaultConnectionListeners();
         }
 
-        return Observable.of(this._client);
+        return Observable.fromPromise(
+            new Promise((resolve, reject) => {
+                client.on('ready', resolve)
+            })
+        ).switchMap(() => Observable.of(client));
     }
 
     private defaultConnectionListeners () {
         this._client.on('error', (err) => console.error(`Error: ${err}`));
         this._client.on('ready', () => console.log('Connected to Redis'));
-        this._client.on('reconnecting', (details) => {
-            console.log('Attempting to reconnect to redis...')
-            console.log(`Delay: ${details.delay}`);
-            console.log(`Attempt: ${details.attempt}`);
-        });
+        this._client.on('reconnecting', (details) => 
+            console.log(`Attempting to reconnect to redis...\nDelay: ${details.delay}\nAttempt: ${details.attempt}`)
+        );
         this._client.on('end', () => console.log('Disconnected from Redis'));
     }
 
-    public set (key: string, value: string): Observable<string> {
+    public set (key: string, value: string, expiry = this._defaultExpiry): Observable<string> {
         return Observable.fromPromise(
             new Promise((resolve, reject) => {
-                this._client.set(key, value, (err, response) => {
+                this._client.set(key, value, mode, expiry, (err, response) => {
                     if (err) {
                         return reject(err);
                     }
@@ -44,24 +50,26 @@ export class Redis {
                     resolve(response);
                 })
             })
-        )
+        );
     }
 
-    public hset (hash: string, field: string, value: string): Observable<number> {
+    public hset (hash: string, field: string, value: string, expiry = this._defaultExpiry): Observable<number> {
         return Observable.fromPromise(
             new Promise((resolve, reject) => {
                 this._client.hset(hash, field, value, (err, response) => {
                     if (err) {
                         return reject(err);
                     }
-
-                    resolve(response);
+                    
+                    this._client.expire(hash, expiry, (err, response) => {
+                        resolve(response);
+                    });
                 });
             })
         );
     }
 
-    public HMSET (hash: string, object: {[key: string]: string | number}): Observable<boolean> {
+    public HMSET (hash: string, object: {[key: string]: string | number}, expiry = this._defaultExpiry): Observable<number> {
         return Observable.fromPromise(
             new Promise((resolve, reject) => {
                 this._client.HMSET(hash, object, (err, response) => {
@@ -69,7 +77,9 @@ export class Redis {
                         return reject(err);
                     }
                     
-                    resolve(response);
+                    this._client.expire(hash, expiry, (err, response) => {
+                        resolve(response);
+                    });
                 });
             })
         )
@@ -123,6 +133,13 @@ export class Redis {
 
     set listeners (listeners: Function) {
         this._listeners = listeners;
+    }
+
+    set defaultExpiry (expiry: number) {
+        if (typeof(expiry) !== 'number') {
+            expiry = thirtyMinutes;
+        }
+        this._defaultExpiry = expiry;
     }
 }
 

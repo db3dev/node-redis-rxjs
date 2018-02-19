@@ -1,10 +1,11 @@
 {
   "name": "redis-rxjs",
-  "version": "1.0.0",
+  "version": "0.0.1",
   "description": "RXJS wrapper for redis client",
-  "main": "dist/index.js",
+  "main": "./lib/redis.js",
+  "types": "./lib/redis.d.ts",
   "scripts": {
-    "build": "tsc"
+    "compile": "tsc --declaration"
   },
   "author": "Don Burgess",
   "license": "ISC",
